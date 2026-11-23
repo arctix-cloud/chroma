@@ -10,9 +10,10 @@ import tty
 import termios
 import select
 import shutil
+import re
 import subprocess
 
-# 27 curated color schemes database
+# 26 curated color schemes database
 THEMES = {
     "Termux (Default)": None,
     "Arctix Dynamic Aero 2X": """background=#000000
@@ -395,26 +396,7 @@ color12=#0000ff
 color13=#ff00ff
 color14=#00ffff
 color15=#ffffff""",
-    "CGA": """background=#000000
-foreground=#aaaaaa
-cursor=#ffffff
-color0=#000000
-color1=#aa0000
-color2=#00aa00
-color3=#aa5500
-color4=#0000aa
-color5=#aa00aa
-color6=#00aaaa
-color7=#aaaaaa
-color8=#555555
-color9=#ff5555
-color10=#55ff55
-color11=#ffff55
-color12=#5555ff
-color13=#ff55ff
-color14=#55ffff
-color15=#ffffff""",
-    "IBM 5153": """background=#000000
+    "CGA (IBM 5153)": """background=#000000
 foreground=#aaaaaa
 cursor=#ffffff
 color0=#000000
@@ -550,6 +532,12 @@ color15=#ffffff"""
 def apply_theme(name):
     """Write theme properties to ~/.termux/colors.properties and reload."""
     target = os.path.expanduser("~/.termux/colors.properties")
+    if os.path.exists(target):
+        with open(target, "r", encoding="utf-8", errors="ignore") as f:
+            curr = f.read().strip()
+        presets = {v.strip() for v in THEMES.values() if v is not None}
+        if curr and curr not in presets:
+            shutil.copy2(target, target + ".bak")
     val = THEMES.get(name)
     if val is None:
         if os.path.exists(target):
@@ -558,7 +546,8 @@ def apply_theme(name):
         os.makedirs(os.path.dirname(target), exist_ok=True)
         with open(target, "w", encoding="utf-8") as f:
             f.write(val + "\n")
-    subprocess.run(["termux-reload-settings"], check=False)
+    if shutil.which("termux-reload-settings"):
+        subprocess.run(["termux-reload-settings"], check=False)
 
 def get_raw_key(fd):
     """
@@ -614,7 +603,7 @@ def main():
             curr_name = names[idx]
             c_dict = get_theme_dict(THEMES[curr_name])
 
-            out = ["\033[H\033[2J"]
+            out = ["\033[H"]
 
             if not show_demo:
                 # Mode 1: List selection view
@@ -634,10 +623,12 @@ def main():
                     if cur_item_idx >= len(names):
                         break
                     tname = names[cur_item_idx]
+                    w = max(1, cols - 4)
+                    dname = tname[:w]
                     if cur_item_idx == idx:
-                        out.append(f"\033[7;1;32m > {tname:<{cols-4}} \033[0m\r\n")
+                        out.append(f"\033[7;1;32m > {dname:<{w}} \033[0m\r\n")
                     else:
-                        out.append(f"   {tname[:cols-4]}\r\n")
+                        out.append(f"   {dname}\r\n")
 
                 stat = f"[{idx + 1}/{len(names)}] - Press Tab to toggle Truecolor preview"
                 out.append(f"\r\n\033[2m{stat[:cols]}\033[0m")
@@ -669,9 +660,14 @@ def main():
                 t_bg = f"\033[48;2;{bg_r};{bg_g};{bg_b}m"
                 t_fg = f"\033[38;2;{fg_r};{fg_g};{fg_b}m"
 
-                pad_w = max(20, cols - 4)
+                pad_w = max(10, cols - 4)
+                ansi_re = re.compile(r"\033\[[0-9;]*m")
+                cur_r, cur_g, cur_b = parse_hex(c_dict.get("cursor", "#ffffff"))
+                t_cur = f"\033[48;2;{cur_r};{cur_g};{cur_b}m \033[0m"
                 def box_line(content):
-                    return f"  {t_bg}{content:<{pad_w}}\033[0m\r\n"
+                    vis_len = len(ansi_re.sub("", content))
+                    pad = max(0, pad_w - vis_len)
+                    return f"  {t_bg}{content}" + (" " * pad) + "\033[0m\r\n"
 
                 # Dynamic branch banner per series
                 if "Arctix" in curr_name:
@@ -696,10 +692,10 @@ def main():
                 out.append(box_line(f"{fg(3)}On branch main - {s_msg}"))
                 out.append(box_line(f"{fg(1)}[ALERT]  {fg(5)}Virtualization KVM Module Loaded{t_fg}"))
                 out.append(box_line(f"{fg(6)}[STATUS] {fg(10)}All checks passed (24-bit Truecolor OK){t_fg}"))
-                out.append(box_line(f"{fg(2)}user@termux{t_fg}:{fg(4)}~/chroma{t_fg}$ \033[7m \033[0m"))
+                out.append(box_line(f"{fg(2)}user@termux{t_fg}:{fg(4)}~/chroma{t_fg}$ {t_cur}{t_bg}"))
                 out.append("-------------------------------\r\n")
 
-            sys.stdout.write("".join(out))
+            sys.stdout.write("".join(out).replace("\r\n", "\033[K\r\n") + "\033[K\033[J")
             sys.stdout.flush()
 
             while True:
