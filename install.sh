@@ -1,5 +1,5 @@
 #!/data/data/com.termux/files/usr/bin/bash
-# Termux 환경에 chroma 및 자동 업데이트 별칭을 설치하는 스크립트임다
+# Chroma installer: deploys binary and configures shell shortcuts
 
 echo "Installing dependencies..."
 pkg install -y python git > /dev/null 2>&1
@@ -8,7 +8,7 @@ echo "Installing chroma to $PREFIX/bin/chroma..."
 cp chroma.py "$PREFIX/bin/chroma"
 chmod +x "$PREFIX/bin/chroma"
 
-# 쉘 설정 파일(~/.bashrc, ~/.zshrc) 자동 별칭 등록 로직임다
+# Register auto-update alias across available shell configurations
 ALIAS_CMD="alias chroma-update='(cd ~/chroma && git pull && ./install.sh)'"
 
 for RC in "$HOME/.bashrc" "$HOME/.zshrc"; do

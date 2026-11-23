@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-# Arctix 테마 라인업과 재정렬이 적용된 chroma 최신 소스코드임다
+"""
+Chroma: Interactive TUI Terminal Theme Manager for Termux
+Optimized for Dynamic AMOLED 2X displays with Truecolor preview.
+"""
 
 import os
 import sys
@@ -9,7 +12,7 @@ import select
 import shutil
 import subprocess
 
-# Termux 기본값 및 Arctix 최우선 정렬 테마 데이터베이스임다
+# 27 curated color schemes database
 THEMES = {
     "Termux (Default)": None,
     "Arctix Dynamic Aero 2X": """background=#000000
@@ -508,15 +511,15 @@ color14=#d55e00
 color15=#ffffff"""
 }
 
-# 16진수 색상 코드를 정수형 RGB 튜플로 파싱하는 함수임다
 def parse_hex(hex_str):
+    """Parse a 6-digit hex color code into an integer RGB tuple."""
     h = hex_str.strip().lstrip('#')
     if len(h) != 6:
         return (200, 200, 200)
     return tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
 
-# 프로퍼티 설정을 딕셔너리 구조로 파싱하는 함수임다
 def get_theme_dict(raw_str):
+    """Parse raw key-value theme properties into a dictionary."""
     if raw_str is None:
         raw_str = """background=#000000
 foreground=#ffffff
@@ -544,8 +547,8 @@ color15=#ffffff"""
             d[k.strip()] = v.strip()
     return d
 
-# 선택한 테마를 Termux 설정에 기록하고 리로드하는 함수임다
 def apply_theme(name):
+    """Write theme properties to ~/.termux/colors.properties and reload."""
     target = os.path.expanduser("~/.termux/colors.properties")
     val = THEMES.get(name)
     if val is None:
@@ -557,19 +560,24 @@ def apply_theme(name):
             f.write(val + "\n")
     subprocess.run(["termux-reload-settings"], check=False)
 
-# 커널 레벨에서 원시 패킷을 즉시 수신하는 키 파서임다
 def get_raw_key(fd):
+    """
+    Read raw bytes directly from the terminal file descriptor to bypass
+    Python TextIOWrapper buffering, correctly parsing ANSI and SS3 key sequences.
+    """
     select.select([fd], [], [])
     raw = os.read(fd, 32)
     if not raw:
         return 'IGNORE'
 
+    # Check for standalone ESC vs trailing escape sequence
     if raw == b'\x1b':
         if select.select([fd], [], [], 0.05)[0]:
             raw += os.read(fd, 32)
         else:
             return 'ESC'
 
+    # Handle standard cursor keys and mobile SS3 key codes
     if raw in (b'\x1b[A', b'\x1bOA') or (raw.startswith(b'\x1b') and raw.endswith(b'A')):
         return 'UP'
     elif raw in (b'\x1b[B', b'\x1bOB') or (raw.startswith(b'\x1b') and raw.endswith(b'B')):
@@ -587,8 +595,8 @@ def get_raw_key(fd):
 
     return 'IGNORE'
 
-# TUI 렌더링 루프를 구동하는 메인 함수임다
 def main():
+    """Main interactive TUI loop."""
     names = list(THEMES.keys())
     idx = 0
     top_offset = 0
@@ -609,6 +617,7 @@ def main():
             out = ["\033[H\033[2J"]
 
             if not show_demo:
+                # Mode 1: List selection view
                 title = "=== Chroma Theme Manager ==="
                 guide = "[Tab] Preview Toggle  |  [Up/Down] Navigate  |  [Enter] Apply  |  [q] Quit"
                 out.append(f"\033[1;36m{title[:cols]}\033[0m\r\n")
@@ -633,6 +642,7 @@ def main():
                 stat = f"[{idx + 1}/{len(names)}] - Press Tab to toggle Truecolor preview"
                 out.append(f"\r\n\033[2m{stat[:cols]}\033[0m")
             else:
+                # Mode 2: Live 24-bit Truecolor terminal simulation
                 bg_r, bg_g, bg_b = parse_hex(c_dict.get('background', '#000000'))
                 fg_r, fg_g, fg_b = parse_hex(c_dict.get('foreground', '#ffffff'))
 
@@ -641,6 +651,7 @@ def main():
                 out.append(f"\033[1;35m{header[:cols]}\033[0m\r\n")
                 out.append(f"\033[33m{guide[:cols]}\033[0m\r\n\r\n")
 
+                # Palette color blocks (0-7 and 8-15)
                 out.append("Palette 0-7  : ")
                 for i in range(8):
                     r, g, b = parse_hex(c_dict.get(f'color{i}', '#888888'))
@@ -662,10 +673,7 @@ def main():
                 def box_line(content):
                     return f"  {t_bg}{content:<{pad_w}}\033[0m\r\n"
 
-                out.append("--- Terminal Preview Window ---\r\n")
-                out.append(box_line(f"{fg(2)}user@termux{t_fg}:{fg(4)}~/chroma{t_fg}$ uname -a"))
-                out.append(box_line(f"{t_fg}Linux termux 6.1.0-arm64 #1 SMP PREEMPT Android"))
-                out.append(box_line(f"{fg(2)}user@termux{t_fg}:{fg(4)}~/chroma{t_fg}$ git status"))
+                # Dynamic branch banner per series
                 if "Arctix" in curr_name:
                     s_msg = "Arctix AMOLED 2X Series - Pure Black"
                 elif "Termux" in curr_name:
@@ -680,6 +688,11 @@ def main():
                     s_msg = "Accessibility Colorblind-Friendly Series"
                 else:
                     s_msg = "Retro & PC Console Heritage Series"
+
+                out.append("--- Terminal Preview Window ---\r\n")
+                out.append(box_line(f"{fg(2)}user@termux{t_fg}:{fg(4)}~/chroma{t_fg}$ uname -a"))
+                out.append(box_line(f"{t_fg}Linux termux 6.1.0-arm64 #1 SMP PREEMPT Android"))
+                out.append(box_line(f"{fg(2)}user@termux{t_fg}:{fg(4)}~/chroma{t_fg}$ git status"))
                 out.append(box_line(f"{fg(3)}On branch main - {s_msg}"))
                 out.append(box_line(f"{fg(1)}[ALERT]  {fg(5)}Virtualization KVM Module Loaded{t_fg}"))
                 out.append(box_line(f"{fg(6)}[STATUS] {fg(10)}All checks passed (24-bit Truecolor OK){t_fg}"))
